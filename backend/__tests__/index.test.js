@@ -1,6 +1,6 @@
 'use strict';
 
-const { STADIUM_ZONES, isValidStatus } = require('../index');
+const { STADIUM_ZONES, isValidStatus } = require('../src/index');
 
 // ─────────────────────────────────────────────
 // Unit Tests: StadiumFlow Backend Engine

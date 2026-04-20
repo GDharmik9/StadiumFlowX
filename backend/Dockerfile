@@ -25,7 +25,7 @@ WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 
 # Copy application code
-COPY index.js .
+COPY src/ ./src/
 COPY package.json .
 
 # Set environment
@@ -43,4 +43,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 # Start the server
-CMD ["node", "index.js"]
+CMD ["node", "src/index.js"]
