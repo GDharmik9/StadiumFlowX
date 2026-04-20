@@ -29,9 +29,6 @@
       "output": "static",
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "react-native-webview"
-    ],
     "extra": {
       "eas": {
         "projectId": "stadiumflow"
