@@ -90,11 +90,11 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
                     state.coords = state.path[state.step];
                 } 
                 else {
-                    // Re-route! Pick a new geometric random target mapping smoothly over the concourse Arc!
+                    // Re-route instantly! Constant chaos pacing scaling organically!
                     const newTarget = { x: 100 + Math.random() * 800, y: 100 + Math.random() * 800 };
                     state.path = getPath(state.coords, newTarget);
                     state.step = 0;
-                    state.waitTicks = 20 + Math.floor(Math.random() * 40); // Random wait simulating check-ins naturally
+                    state.waitTicks = 5 + Math.floor(Math.random() * 10); // Hyperactive wait bridging constant visual motion
                 }
                 ghostStateRef.current[ghostBase.tester_id] = state;
 
@@ -486,7 +486,7 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
                          🔥 CONGESTION WARNING
                     </Text>
                     <Text style={[styles.suggestionSub, { color: '#ffaaaa', fontSize: 16, marginTop: 10, lineHeight: 22 }]}>
-                         {selectedZone.id} is currently experiencing extreme crowd density! Estimated Wait Time: 18 Minutes.
+                         {selectedZone.id} is currently experiencing crowd density! Estimated Wait Time: 4-7 Minutes.
                     </Text>
                     {selectedZone.alternativeCoords ? (
                         <TouchableOpacity style={[styles.hudBtnGreen, { backgroundColor: '#ff3b30', marginTop: 15, padding: 15 }]} onPress={() => {
