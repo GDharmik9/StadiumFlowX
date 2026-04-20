@@ -2,14 +2,14 @@ const express = require('express');
 const admin = require('firebase-admin');
 
 const app = express();
-// Use Application Default Credentials (no JSON key needed!)
+app.use(express.json());
+
 admin.initializeApp({
   credential: admin.credential.applicationDefault()
 });
 
 const db = admin.firestore();
 
-// A simple endpoint to check if the engine is alive
 app.get('/', (req, res) => {
   res.send('StadiumFlow Engine is running 🏟️');
 });
@@ -22,8 +22,8 @@ app.get('/seed', async (req, res) => {
 
     const zones = [
       { id: 'Gate_1', data: { type: 'gate', capacity: 500, current_pings: 50, coordinates: { x: 500, y: 950 }, status: 'green' } },
-      { id: 'Zone_A_Stand', data: { type: 'stand', capacity: 2000, current_pings: 1200, coordinates: { x: 500, y: 750 }, status: 'yellow' } },
-      { id: 'Food_Court_West', data: { type: 'food_court', capacity: 100, current_pings: 85, coordinates: { x: 150, y: 500 }, status: 'orange' } },
+      { id: 'Zone_A_Stand', data: { type: 'stand', capacity: 2000, current_pings: 1200, coordinates: { x: 500, y: 750 }, status: 'green' } },
+      { id: 'Food_Court_West', data: { type: 'food_court', capacity: 100, current_pings: 85, coordinates: { x: 150, y: 500 }, status: 'green' } },
       { id: 'Washroom_North', data: { type: 'washroom', capacity: 50, current_pings: 10, coordinates: { x: 500, y: 100 }, status: 'green' } }
     ];
 
@@ -52,46 +52,73 @@ app.get('/seed', async (req, res) => {
   }
 });
 
-app.get('/verify', async (req, res) => {
-  try {
-    const doc = await db.collection('stadium_zones').doc('Gate_1').get();
-    if (!doc.exists) {
-      res.send('No Gate_1 document found!');
-    } else {
-      res.json(doc.data());
-    }
-  } catch (error) {
-    res.status(500).send(error.message);
-  }
-});
-
-// Monitor users collection for Simulation Triggers
+// ==========================================
+// THE SCENARIO ENGINE (Digital Reality Script Engine)
+// ==========================================
 db.collection('users').onSnapshot(snapshot => {
   snapshot.docChanges().forEach(change => {
     if (change.type === 'modified' || change.type === 'added') {
       const data = change.doc.data();
-      if (data.hasEntered) {
-        console.log(`[PUSH NOTIFICATION] Triggering alert for tester: ${data.tester_id}`);
+      const userId = data.tester_id;
+      
+      // Hook interceptor: Trigger event exactly when a map enters the flow
+      if (data.hasEntered && !data.scenario_deployed) {
+        console.log(`\n===========================================`);
+        console.log(`[SCENARIO PUSHER] Triggering script for: ${userId}`);
+        
+        // Anti-loop tracking boundary lock
+        change.doc.ref.update({ scenario_deployed: true });
+
+        if (userId === 'User_1' || userId === 'User_3') {
+           // === SCENARIO A: The Early Arrival ===
+           console.log("-> SCENARIO A RUNNING");
+           db.collection('stadium_zones').doc('Food_Court_West').update({ status: 'orange' });
+           
+           // Simulated Time Shift: "T+10 Minutes" compressed into 10 real-time seconds for pitch demonstration
+           setTimeout(() => {
+               console.log("[EVENT]: Scenario A Global Clock Hit - FC West updating to Green.");
+               db.collection('stadium_zones').doc('Food_Court_West').update({ status: 'green' });
+           }, 10000);
+           
+        } else if (userId === 'User_2' || userId === 'User_4') {
+           // === SCENARIO B: The Half-Time Rush ===
+           console.log("-> SCENARIO B RUNNING");
+           db.collection('stadium_zones').doc('Gate_1').update({ status: 'yellow' });
+           db.collection('stadium_zones').doc('Food_Court_West').update({ status: 'purple' });
+           
+           // Target User Injection! Native react alert via firestore field payload
+           change.doc.ref.update({ 
+               notification: "Food Court West is critically congested (25 Min Wait). Food Court East is currently Green. Redirecting your path immediately."
+           });
+        }
       }
     }
   });
 });
 
-// Logic: Poll for crowd density in 'stadium_zones' every 10 seconds (More stable on Cloud Run)
-setInterval(async () => {
+// REST Scenario Controller
+app.post('/scenario/end-match', async (req, res) => {
+    console.log("[SCENARIO C EXECUTED]: Final Over Rush");
     try {
-        const snapshot = await db.collection('stadium_zones').get();
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            if (data.capacity > 0 && data.current_pings / data.capacity > 0.8) {
-                console.log(`ALERT: ${doc.id} is congested!`);
-                // Here you would write a notification to a 'notifications' collection
+        const batch = db.batch();
+        const zones = await db.collection('stadium_zones').get();
+        
+        // Mass system override - locking tunnel bounds
+        zones.forEach(docSnap => {
+            if (docSnap.data().type === 'gate') {
+                batch.update(docSnap.ref, { status: 'red' });
+            } else {
+                batch.update(docSnap.ref, { status: 'orange' });
             }
         });
-    } catch (err) {
-         console.error('Error polling stadium_zones:', err);
+        
+        await batch.commit();
+        res.send({ log: "Scenario C Deployed: All user paths re-routing to isolated Green paths." });
+    } catch(err) {
+        res.status(500).send(err.message);
     }
-}, 10000);
+});
+
 
 const port = process.env.PORT || 8080;
 app.listen(port, () => {

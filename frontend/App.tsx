@@ -1,76 +1,133 @@
-// Inside your main App.tsx
 import React, { useEffect, useState } from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Alert, SafeAreaView, Platform } from 'react-native';
 import { db, auth } from './src/services/firebaseConfig';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, collection } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { TrafficStatusBar } from './src/components/TrafficStatusBar';
 import { StadiumMap } from './src/components/StadiumMap';
 import { RoleSelector } from './src/components/RoleSelector';
+import { Dashboard } from './src/components/Dashboard';
+import { getPath } from './src/utils/pathfinding';
 
 export default function App() {
-  const [gateData, setGateData] = useState({ current_pings: 0, capacity: 10 });
-  const [userLocation, setUserLocation] = useState({ x: 500, y: 500 });
-  const [isAuthReady, setIsAuthReady] = useState(false);
+  // Use arrays mapping all locations from Firebase dynamically
+  const [stadiumZones, setStadiumZones] = useState<any[]>([]);
+  
+  // High-Level View Router Switch
+  const [currentView, setCurrentView] = useState<'auth' | 'role_select' | 'dashboard' | 'simulation'>('auth');
+  
   const [uid, setUid] = useState<string | null>(null);
   const [activeRole, setActiveRole] = useState<string | null>(null);
+  
+  // Default Spawn Path Array (Gate_1 to Zone A)
+  const defaultPath = [{x: 500,y: 950}, {x: 500,y: 800}, {x: 450,y: 750}];
+  const [navigationPath, setNavigationPath] = useState(defaultPath);
 
   useEffect(() => {
-    // 1. Listen for authentication state changes (Anonymous Auth)
+    // 1. Silent Auth Initialization (overridden rules protect against timeouts)
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
-        console.log("Simulation Identity Verified:", user.uid);
         setUid(user.uid);
-        setIsAuthReady(true);
+        setCurrentView('role_select');
       } else {
-        console.log("No user signed in, triggering silent anonymous login...");
-        signInAnonymously(auth)
-          .then(() => console.log("Anonymous Session Created"))
-          .catch((error) => console.error("Auth Error:", error.code, error.message));
+        signInAnonymously(auth).catch(err => console.error(err));
       }
     });
 
-    // Listen to the stadium zone in real-time
-    const unsub = onSnapshot(doc(db, "stadium_zones", "Gate_1"), (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
-        setGateData({
-          current_pings: data.current_pings,
-          capacity: data.capacity
-        });
-      }
+    // 2. Global Amenity Array Polling Layer (Re-syncs map when Scenarios run)
+    const unsubZones = onSnapshot(collection(db, "stadium_zones"), (snapshot) => {
+      const zonesRaw = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setStadiumZones(zonesRaw);
     });
     
-    return () => {
-      unsub();
-      unsubscribeAuth();
-    };
+    return () => { unsubZones(); unsubscribeAuth(); };
   }, []);
 
-  if (!isAuthReady) {
+  // 3. Script Engine Alert Receiver hook
+  useEffect(() => {
+    if (activeRole) {
+       const userDocRef = doc(db, "users", activeRole);
+       const unsubUser = onSnapshot(userDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+              const data = docSnap.data();
+              if (data.notification) {
+                  Alert.alert("🚨 Active Redirect Initiated", data.notification, [{ text: "Understood" }]);
+                  updateDoc(userDocRef, { notification: null }).catch(err => console.error(err));
+              }
+          }
+       });
+       return () => unsubUser();
+    }
+  }, [activeRole]);
+
+  // Viewport structural Wrapper protecting notch interference 
+  const RouteWrapper = ({ children }: { children: React.ReactNode }) => (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff', paddingTop: Platform.OS === 'android' ? 25 : 0 }}>
+          {children}
+      </SafeAreaView>
+  );
+
+  // ==============================
+  // RENDER ROUTING
+  // ==============================
+  if (currentView === 'auth') {
+    return <RouteWrapper><View style={{flex:1, justifyContent:'center', alignItems:'center'}}><Text>Initializing Secure Session...</Text></View></RouteWrapper>;
+  }
+
+  if (currentView === 'role_select') {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text>Initializing Secure Session...</Text>
-      </View>
+      <RouteWrapper>
+        <RoleSelector uid={uid!} onRoleSelected={(roleId) => {
+            setActiveRole(roleId);
+            setNavigationPath(defaultPath); // reset bounds
+            setCurrentView('dashboard');
+        }} />
+      </RouteWrapper>
     );
   }
 
-  if (isAuthReady && !activeRole) {
-    return <RoleSelector uid={uid!} onRoleSelected={setActiveRole} />;
+  if (currentView === 'dashboard') {
+    return (
+        <RouteWrapper>
+            <Dashboard 
+                testerId={activeRole!} 
+                onEnterStadium={() => setCurrentView('simulation')} 
+                onGoBack={() => setCurrentView('role_select')}
+            />
+        </RouteWrapper>
+    );
   }
 
-  return (
-    <View style={{ flex: 1, backgroundColor: '#fff' }}>
-      {/* 1. Status Bar at the very top */}
-      <TrafficStatusBar 
-        currentPings={gateData.current_pings} 
-        capacity={gateData.capacity} 
-      />
+   if (currentView === 'simulation') {
+      // Filter the 'Gate_1' data specifically for the old Traffic bar
+      const entranceData = stadiumZones.find(z => z.id === 'Gate_1') || { current_pings: 0, capacity: 10 };
       
-      {/* 2. Map takes up the rest of the space */}
-      <View style={{ flex: 1, justifyContent: 'center' }}>
-        <StadiumMap userLocation={userLocation} />
-      </View>
-    </View>
-  );
+      return (
+        <RouteWrapper>
+          <View style={{ flex: 1, backgroundColor: '#fff' }}>
+            {/* Decoupled Back Nav strictly avoiding Status Bar conflicts */}
+            <View style={{flexDirection: 'row', padding: 15, borderBottomWidth: 1, borderColor: '#eee', alignItems: 'center'}}>
+                <Text style={{color:'#007AFF', fontWeight:'bold', fontSize:16}} onPress={() => setCurrentView('dashboard')}>
+                     {"< Exit Simulation"}
+                </Text>
+            </View>
+            <TrafficStatusBar currentPings={entranceData.current_pings} capacity={entranceData.capacity} />
+            <View style={{ flex: 1, justifyContent: 'center' }}>
+              <StadiumMap 
+                 userLocation={{ x: 500, y: 950 }} 
+                 navigationPath={navigationPath} 
+                 stadiumZones={stadiumZones}
+                 onReroute={(newTarget: any) => {
+                     // Array Route overriding algorithm bypassing Center trajectory securely
+                     const safeCurveArray = getPath({x: 500, y: 950}, newTarget);
+                     setNavigationPath(safeCurveArray);
+                 }}
+              />
+            </View>
+          </View>
+        </RouteWrapper>
+      );
+  }
+  
+  return null;
 }
