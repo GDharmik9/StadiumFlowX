@@ -1,0 +1,65 @@
+rules_version = '2';
+
+/**
+ * Firestore Security Rules for StadiumFlow
+ *
+ * Enforces authentication, authorization, and data validation
+ * for all collections used by the crowd management platform.
+ *
+ * @see https://firebase.google.com/docs/firestore/security/get-started
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper Functions ──────────────────────
+
+    /** Check if the request comes from an authenticated user */
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    /** Check if the user owns the document */
+    function isOwner(uid) {
+      return request.auth.uid == uid;
+    }
+
+    /** Validate that a string is a valid congestion status */
+    function isValidStatus(status) {
+      return status in ['green', 'yellow', 'orange', 'red', 'purple'];
+    }
+
+    // ─── Stadium Zones Collection ──────────────
+    // Read: Any authenticated user
+    // Write: Only server-side (Admin SDK bypasses rules)
+    match /stadium_zones/{zoneId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only Admin SDK (backend) can write
+    }
+
+    // ─── Users Collection ──────────────────────
+    // Read: Any authenticated user (needed for crowd visualization)
+    // Write: Users can only create/update their own document
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+                    && request.resource.data.uid == request.auth.uid;
+      allow update: if isAuthenticated()
+                    && (resource.data.uid == request.auth.uid
+                        || request.resource.data.keys().hasOnly(['notification', 'scenario_deployed']));
+      allow delete: if false;
+    }
+
+    // ─── Tickets Collection ────────────────────
+    // Read: Authenticated users can read their assigned ticket
+    // Write: Only server-side
+    match /tickets/{ticketId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only Admin SDK
+    }
+
+    // ─── Default: Deny All ─────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

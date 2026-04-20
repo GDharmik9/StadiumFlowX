@@ -3,6 +3,7 @@
 **Real-time crowd congestion detection and smart navigation for mega stadiums — powered by GPS, Bluetooth beacons, and a 3D Digital Twin.**
 
 > 📹 Video Link: [https://drive.google.com/file/d/1ZukeUHV_bff6SxuYpiowW01Y8vLWgq8r/view?usp=sharing](https://drive.google.com/file/d/1ZukeUHV_bff6SxuYpiowW01Y8vLWgq8r/view?usp=sharing)
+
 ---
 
 ## The Problem
@@ -69,7 +70,7 @@ By fusing both signals, StadiumFlow knows **exactly** where every fan is, whethe
 The backend aggregates anonymized positions from all active fans and computes a **live congestion score** for every amenity zone:
 
 | Status | Color | Meaning |
-|--------|-------|---------|
+|--------|-------|---------| 
 | 🟢 Green | `#4CD964` | Clear — walk right in |
 | 🟠 Orange | `#FF9500` | Busy — expect a short wait |
 | 🔴 Red | `#FF3B30` | Congested — 15+ min wait, avoid |
@@ -119,14 +120,31 @@ StadiumFlow is demonstrated using the **Narendra Modi Stadium** (Ahmedabad, Indi
 ## Tech Stack
 
 | Layer | Technology | Purpose |
-|-------|-----------|---------|
+|-------|-----------|---------| 
 | **Mobile App** | React Native (Expo) | Cross-platform iOS/Android/Web |
 | **3D Map Engine** | MapLibre GL JS | Vector tiles, 3D extrusions, satellite imagery |
-| **Backend** | Node.js + Firebase | Real-time data sync, congestion computation |
-| **Database** | Firestore | Live crowd positions, amenity status |
-| **Positioning** | GPS + BLE Beacons | Hybrid indoor/outdoor location tracking |
-| **Hosting** | Firebase Hosting | Web deployment |
-| **Cloud** | Google Cloud Run | Backend API serving |
+| **Backend** | Node.js + Express | RESTful API + scenario engine |
+| **Database** | Cloud Firestore | Real-time data sync, congestion computation |
+| **Auth** | Firebase Anonymous Auth | Seamless fan authentication |
+| **Hosting** | Firebase Hosting | Web deployment with CDN |
+| **Cloud** | Google Cloud Run | Auto-scaling backend container |
+| **Security** | Helmet + CORS + Rate Limiting | API protection & headers |
+| **Testing** | Jest + Supertest | Unit & integration tests |
+| **Types** | TypeScript (strict mode) | Full type safety across frontend |
+
+---
+
+## Google Cloud Services Integration
+
+StadiumFlow leverages multiple Google Cloud services:
+
+| Service | Usage |
+|---------|-------|
+| **Cloud Run** | Hosts the backend congestion engine as a containerized service with auto-scaling |
+| **Cloud Firestore** | Real-time NoSQL database for zone status, user positions, and notifications |
+| **Firebase Authentication** | Anonymous auth for seamless fan onboarding without PII collection |
+| **Firebase Hosting** | CDN-backed static hosting for the web build with automatic SSL |
+| **Application Default Credentials** | Secure server-to-server auth from Cloud Run to Firestore |
 
 ---
 
@@ -134,19 +152,30 @@ StadiumFlow is demonstrated using the **Narendra Modi Stadium** (Ahmedabad, Indi
 
 ```
 StadiumFlow/
-├── frontend/               # React Native (Expo) app
+├── frontend/                  # React Native (Expo) app
+│   ├── App.tsx                # Root component with auth & routing
 │   └── src/
-│       ├── components/     # StadiumMap (3D engine), UI overlays
-│       ├── screens/        # MapScreen, LoginScreen
-│       ├── utils/          # Pathfinding, GPS coordinates, venue data
-│       └── services/       # Firebase configuration
-├── backend/                # Node.js congestion engine
-├── docs/                   # Architecture documentation
-│   ├── HLD.md              # High-Level Design
-│   ├── LLD.md              # Low-Level Design
-│   ├── design.md           # UI/UX Design Philosophy
-│   └── description.md      # Project Synopsis
-└── package.json            # Workspace root
+│       ├── components/        # StadiumMap, Dashboard, RoleSelector, TrafficStatusBar
+│       ├── services/          # Firebase configuration (env-aware)
+│       ├── types/             # Shared TypeScript type definitions
+│       ├── utils/             # Pathfinding, GPS coordinates, venue data
+│       └── __tests__/         # Unit tests (pathfinding, coordinates, venue)
+├── backend/                   # Node.js congestion engine
+│   ├── index.js               # Express server with security middleware
+│   ├── Dockerfile             # Multi-stage Cloud Run container
+│   ├── __tests__/             # Unit tests (zones, validation)
+│   └── jest.config.js         # Test configuration
+├── docs/                      # Architecture documentation
+│   ├── HLD.md                 # High-Level Design
+│   ├── LLD.md                 # Low-Level Design
+│   ├── design.md              # UI/UX Design Philosophy
+│   └── description.md         # Project Synopsis
+├── firestore.rules            # Firestore security rules
+├── SECURITY.md                # Security practices documentation
+├── ACCESSIBILITY.md           # WCAG accessibility compliance
+├── TESTING.md                 # Test strategy & coverage
+├── .env.example               # Environment variable template
+└── package.json               # Workspace root
 ```
 
 ---
@@ -160,11 +189,55 @@ npm install
 # Launch the app (opens Expo dev server)
 npm run start:ui
 
+# Run backend tests
+cd backend && npm test
+
 # Clean all node_modules if needed
 npm run clean
 ```
 
 **Live Web Demo:** [https://disco-dispatch-493610-i4.web.app](https://disco-dispatch-493610-i4.web.app)
+
+---
+
+## Testing
+
+StadiumFlow has comprehensive test coverage across both frontend and backend:
+
+```bash
+# Backend unit tests (14 tests)
+cd backend && npm test
+
+# Frontend type checking
+cd frontend && npx tsc --noEmit
+```
+
+See [TESTING.md](./TESTING.md) for the full test strategy, coverage targets, and test descriptions.
+
+---
+
+## Security
+
+- **API Security**: Helmet.js, CORS whitelisting, rate limiting (100 req/15min)
+- **Input Validation**: All inputs validated before database operations
+- **Auth**: Firebase Anonymous Authentication — no PII collected
+- **Firestore Rules**: Role-based access control with default-deny
+- **Infrastructure**: Non-root Docker containers, HTTPS-only Cloud Run
+
+See [SECURITY.md](./SECURITY.md) for comprehensive security documentation.
+
+---
+
+## Accessibility
+
+- **WCAG 2.1 AA** compliance across all React Native components
+- Semantic roles (`button`, `alert`, `tab`, `header`) on all interactive elements
+- `accessibilityLabel` and `accessibilityHint` on every touchable
+- Live regions for real-time updates (toast notifications, traffic status)
+- Color + text redundancy for congestion status (color-blind safe)
+- Minimum 44-48px touch targets on all interactive elements
+
+See [ACCESSIBILITY.md](./ACCESSIBILITY.md) for full accessibility documentation.
 
 ---
 
@@ -174,6 +247,9 @@ npm run clean
 - **[Low-Level Design](./docs/LLD.md)** — Pathfinding algorithms, coordinate mapping, data schemas
 - **[UI/UX Design](./docs/design.md)** — Visual philosophy and interaction patterns
 - **[Project Synopsis](./docs/description.md)** — Executive summary of the concept
+- **[Security Practices](./SECURITY.md)** — API security, auth, data protection
+- **[Accessibility](./ACCESSIBILITY.md)** — WCAG compliance and assistive tech support
+- **[Test Strategy](./TESTING.md)** — Test suites, coverage targets, CI integration
 
 ---
 

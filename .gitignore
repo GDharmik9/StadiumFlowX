@@ -41,10 +41,28 @@ yarn-error.*
 /ios
 /android
 
-# google servies 
+# google services
 google-services.json
 
 # large media files
 *.mp4
 *.mov
 *.avi
+
+# service account keys (SECURITY: never commit credentials)
+sa-key.json
+*-credentials.json
+*-service-account.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# test coverage
+coverage/
+.nyc_output/
+
+# build artifacts
+*.tgz

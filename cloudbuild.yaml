@@ -1,0 +1,108 @@
+steps:
+  # ─── Step 1: Build and Push Backend Docker Image ─────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-backend'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/stadiumflow-engine:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/stadiumflow-engine:latest'
+      - '-f'
+      - 'backend/Dockerfile'
+      - 'backend/'
+
+  # ─── Step 2: Push to Container Registry ──────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-backend'
+    args:
+      - 'push'
+      - '--all-tags'
+      - 'gcr.io/$PROJECT_ID/stadiumflow-engine'
+    waitFor: ['build-backend']
+
+  # ─── Step 3: Run Backend Unit Tests ───────────────────────────────────
+  - name: 'node:18-alpine'
+    id: 'test-backend'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        cd backend
+        npm ci --only=dev
+        npm test
+    waitFor: ['-']  # Run in parallel with Docker push
+
+  # ─── Step 4: Deploy to Cloud Run ─────────────────────────────────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-cloud-run'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'stadiumflow-engine'
+      - '--image=gcr.io/$PROJECT_ID/stadiumflow-engine:$COMMIT_SHA'
+      - '--region=asia-south1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--max-instances=10'
+      - '--min-instances=0'
+      - '--memory=512Mi'
+      - '--cpu=1'
+      - '--port=8080'
+      - '--set-env-vars=NODE_ENV=production'
+    waitFor: ['push-backend', 'test-backend']
+
+  # ─── Step 5: Install Frontend Dependencies ────────────────────────────
+  - name: 'node:18-alpine'
+    id: 'install-frontend'
+    entrypoint: 'npm'
+    args: ['ci']
+    dir: 'frontend'
+    waitFor: ['-']
+
+  # ─── Step 6: TypeScript Type Check ────────────────────────────────────
+  - name: 'node:18-alpine'
+    id: 'typecheck-frontend'
+    entrypoint: 'npx'
+    args: ['tsc', '--noEmit']
+    dir: 'frontend'
+    waitFor: ['install-frontend']
+
+  # ─── Step 7: Build Frontend Web Bundle ───────────────────────────────
+  - name: 'node:18-alpine'
+    id: 'build-frontend'
+    entrypoint: 'npx'
+    args: ['expo', 'export', '-p', 'web']
+    dir: 'frontend'
+    waitFor: ['install-frontend']
+
+  # ─── Step 8: Deploy to Firebase Hosting ──────────────────────────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-firebase-hosting'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        npm install -g firebase-tools
+        firebase deploy --only hosting --project $PROJECT_ID --non-interactive
+    waitFor: ['build-frontend', 'typecheck-frontend']
+
+# Images to store in Container Registry
+images:
+  - 'gcr.io/$PROJECT_ID/stadiumflow-engine:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/stadiumflow-engine:latest'
+
+# Build configuration
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+  substitutionOption: 'ALLOW_LOOSE'
+
+# Alert on timeout
+timeout: '1200s'
+
+# Substitution variables (override in trigger)
+substitutions:
+  _REGION: 'asia-south1'
+  _SERVICE_NAME: 'stadiumflow-engine'
