@@ -90,11 +90,11 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
                     state.coords = state.path[state.step];
                 } 
                 else {
-                    // Re-route instantly! Constant chaos pacing scaling organically!
+                    // Re-route! Pick a new geometric random target mapping smoothly over the concourse Arc!
                     const newTarget = { x: 100 + Math.random() * 800, y: 100 + Math.random() * 800 };
                     state.path = getPath(state.coords, newTarget);
                     state.step = 0;
-                    state.waitTicks = 5 + Math.floor(Math.random() * 10); // Hyperactive wait bridging constant visual motion
+                    state.waitTicks = 20 + Math.floor(Math.random() * 40); // Random wait simulating check-ins naturally
                 }
                 ghostStateRef.current[ghostBase.tester_id] = state;
 
@@ -222,7 +222,6 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
                     // High-Resolution Google Maps Satellite tile mapping dynamically linked without API tracking
                     'satellite': { type: 'raster', tiles: ['https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'], tileSize: 256 }
                 },
-                glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
                 layers: [{ id: 'satellite', type: 'raster', source: 'satellite', minzoom: 0, maxzoom: 22 }]
             },
             center: [${virtualToGPS(userLocation.x + activeOffset.x, userLocation.y + activeOffset.y).lng}, ${virtualToGPS(userLocation.x + activeOffset.x, userLocation.y + activeOffset.y).lat}],
@@ -460,19 +459,15 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
                 </View>
             </SafeAreaView>
 
-            {Platform.OS === 'web' ? (() => {
-                // Securely polyfills Web DOM elements instantly without IDE Typescript Reds
-                const WebFrame: any = 'iframe';
-                return (
-                    <View style={[styles.mapFrame, { overflow: 'hidden' }]}>
-                        <WebFrame
-                            ref={webFrameRef}
-                            style={{ width: '100%', height: '100%', border: 'none' }}
-                            srcDoc={htmlContent}
-                        />
-                    </View>
-                );
-            })() : (
+            {Platform.OS === 'web' ? (
+                <View style={[styles.mapFrame, { overflow: 'hidden' }]}>
+                    {React.createElement('iframe', {
+                        ref: webFrameRef,
+                        style: { width: '100%', height: '100%', border: 'none' },
+                        srcDoc: htmlContent
+                    })}
+                </View>
+            ) : (
                 <WebView
                     ref={webViewRef}
                     style={styles.mapFrame}
@@ -491,7 +486,7 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
                          🔥 CONGESTION WARNING
                     </Text>
                     <Text style={[styles.suggestionSub, { color: '#ffaaaa', fontSize: 16, marginTop: 10, lineHeight: 22 }]}>
-                         {selectedZone.id} is currently experiencing crowd density! Estimated Wait Time: 4-7 Minutes.
+                         {selectedZone.id} is currently experiencing extreme crowd density! Estimated Wait Time: 18 Minutes.
                     </Text>
                     {selectedZone.alternativeCoords ? (
                         <TouchableOpacity style={[styles.hudBtnGreen, { backgroundColor: '#ff3b30', marginTop: 15, padding: 15 }]} onPress={() => {
