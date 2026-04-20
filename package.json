@@ -10,6 +10,7 @@
     "start:ui": "npm start --workspace=frontend",
     "android": "npm run android --workspace=frontend",
     "start:server": "npm start --workspace=backend",
-    "seed:db": "npm run seed --workspace=backend"
+    "seed:db": "npm run seed --workspace=backend",
+    "clean": "npx rimraf node_modules frontend/node_modules backend/node_modules"
   }
 }

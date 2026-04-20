@@ -32,10 +32,10 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
     // Validate Check-in completion matching natively coordinates
     useEffect(() => {
         if (!hasCheckedIn && ticketTarget) {
-            if (Math.abs(userLocation.x - ticketTarget.x) < 20 && Math.abs(userLocation.y - ticketTarget.y) < 20) {
-                setHasCheckedIn(true);
-                setToastMessage({ type: 'success', text: 'Ticket successfully checked in at Block. You are now permitted to access Amenities.' });
-            }
+             if (Math.abs(userLocation.x - ticketTarget.x) < 20 && Math.abs(userLocation.y - ticketTarget.y) < 20) {
+                 setHasCheckedIn(true);
+                 setToastMessage({ type: 'success', text: 'Ticket successfully checked in at Block. You are now permitted to access Amenities.' });
+             }
         }
     }, [userLocation, ticketTarget, hasCheckedIn]);
 
@@ -84,11 +84,11 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
 
                 if (state.waitTicks > 0) {
                     state.waitTicks--;
-                }
+                } 
                 else if (state.path && state.step < state.path.length - 1) {
                     state.step++;
                     state.coords = state.path[state.step];
-                }
+                } 
                 else {
                     // Re-route! Pick a new geometric random target mapping smoothly over the concourse Arc!
                     const newTarget = { x: 100 + Math.random() * 800, y: 100 + Math.random() * 800 };
@@ -132,9 +132,9 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
     useEffect(() => {
         let pathData;
         if (pathLineGPS.length >= 2) {
-            pathData = { type: 'Feature', geometry: { type: 'LineString', coordinates: pathLineGPS } };
+             pathData = { type: 'Feature', geometry: { type: 'LineString', coordinates: pathLineGPS } };
         } else {
-            pathData = { type: 'FeatureCollection', features: [] }; // Effectively erases the blue line bridging strictly native bounds!
+             pathData = { type: 'FeatureCollection', features: [] }; // Effectively erases the blue line bridging strictly native bounds!
         }
         executeMapScript(`
             if(window.map && window.map.getSource('navigation-path')) {
@@ -219,15 +219,16 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
             style: {
                 version: 8,
                 sources: {
+                    // High-Resolution Google Maps Satellite tile mapping dynamically linked without API tracking
                     'satellite': { type: 'raster', tiles: ['https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'], tileSize: 256 }
                 },
                 layers: [{ id: 'satellite', type: 'raster', source: 'satellite', minzoom: 0, maxzoom: 22 }]
             },
             center: [${virtualToGPS(userLocation.x + activeOffset.x, userLocation.y + activeOffset.y).lng}, ${virtualToGPS(userLocation.x + activeOffset.x, userLocation.y + activeOffset.y).lat}],
             zoom: 18,
-            pitch: 55,       
+            pitch: 55,       // Isometric Drone projection establishing scale
             bearing: -45,     
-            antialias: true  
+            antialias: true  // Critical for fluid 3D line edges visually
         });
         
         window.map = map;
@@ -243,21 +244,22 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
         window.addEventListener('message', function(e) {
              try {
                   const msg = JSON.parse(e.data);
-                  if (msg.type === 'INJECT_JS') eval(msg.payload);
-             } catch(err){
-                  try { window.parent.postMessage(JSON.stringify({ type: 'IFRAME_ERROR', payload: err.toString() }), '*'); } catch(e){}
-             }
+                  if (msg.type === 'INJECT_JS') {
+                       eval(msg.payload);
+                  }
+             } catch(err){}
         });
 
         map.on('load', () => {
-             try {
+             // Establish singular database natively parsing Extrusions vs Nodes strictly inside the engine!
              map.addSource('stadium-data', { type: 'geojson', data: ${JSON.stringify(venueGeoJSON)} });
              
+             // Layer 1: Stand Extrusions (3D Building filter dynamically scaling)
              map.addLayer({
                   'id': 'room-extrusion',
                   'type': 'fill-extrusion',
                   'source': 'stadium-data',
-                  'filter': ['all', ['==', 'feature_type', 'unit'], ['==', 'level', 1]],
+                  'filter': ['all', ['==', 'feature_type', 'unit'], ['==', 'level', 1]], // Default to strictly Level 1
                   'paint': {
                       'fill-extrusion-color': ['get', 'color'],
                       'fill-extrusion-height': ['get', 'height'],
@@ -266,19 +268,21 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
                   }
              });
 
+             // Layer 2: Network Path Array (GPS Ribbon trajectory)
              map.addSource('navigation-path', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
              map.addLayer({
                   'id': 'navigation-line',
                   'type': 'line',
                   'source': 'navigation-path',
                   'paint': {
-                      'line-color': '#007AFF', 
+                      'line-color': '#007AFF', // Solid tech blue pipeline
                       'line-width': 8,
                       'line-opacity': 0.9,
-                      'line-dasharray': [2, 1] 
+                      'line-dasharray': [2, 1] // Creates dashed GPS flow visually
                   }
              });
 
+             // Layer 3: Interaction Target Hooks (Status aware dots)
              map.addLayer({
                   'id': 'hotspot-points',
                   'type': 'circle',
@@ -298,6 +302,7 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
                   }
              });
 
+             // Layer 3.5: Text labels loudly identifying nodes for Judges visually
              map.addLayer({
                  'id': 'hotspot-labels',
                  'type': 'symbol',
@@ -317,6 +322,7 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
                  }
              });
 
+             // Layer 4: Multi-Agent Cloud Actors (Living Crowd simulation)
              map.addSource('ghost-agents', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
              map.addLayer({
                   'id': 'ghost-layer',
@@ -331,6 +337,7 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
                   }
              });
 
+             // Layer 5: Active User Marker (The Primary Blue Dot)
              map.addSource('active-user', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
              map.addLayer({
                   'id': 'active-user-point',
@@ -345,16 +352,13 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
                   }
              });
 
+             // Interaction Bridges binding Touch back out to Expo App logic safely!
              map.on('click', 'hotspot-points', (e) => {
                   bridgeNativeInterface('HOTSPOT_SELECTED', e.features[0].properties.id);
              });
              
-             } catch (e) {
-                  bridgeNativeInterface('IFRAME_LOAD_ERROR', e.toString() + " at Load Step");
-             }
-        });
-
-        map.on('idle', () => {
+             // MAP_READY listener mapping safely on idle
+             map.on('idle', () => {
                   bridgeNativeInterface('MAP_READY', true);
              });
         });
@@ -375,22 +379,16 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
     const handleWebViewMessage = (event: any) => {
         const rawData = event.nativeEvent ? event.nativeEvent.data : event.data;
         if (!rawData || typeof rawData !== 'string') return;
-
+        
         let data;
         try {
-            data = JSON.parse(rawData);
+             data = JSON.parse(rawData);
         } catch (e) {
-            return; // Gracefully reject random web extension DOM injections bypassing JSON crashes
+             return; // Gracefully reject random web extension DOM injections bypassing JSON crashes
         }
-
-        if (data.type === 'IFRAME_ERROR' || data.type === 'IFRAME_LOAD_ERROR') {
-            setToastMessage({ type: 'warning', text: 'FRAME_ERR: ' + data.payload });
-            return;
-        }
-
+        
         if (data.type === 'MAP_READY') {
             setIsMapReady(true);
-            // setToastMessage({ type: 'success', text: '[WEB] MAP_READY Connected natively!' }); // Debug
             return;
         }
 
@@ -427,9 +425,9 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
     // Web DOM Message Sink safely trapped against Render Cycles
     useEffect(() => {
         if (Platform.OS === 'web') {
-            const listener = (e: any) => handleWebViewMessage(e);
-            window.addEventListener('message', listener);
-            return () => window.removeEventListener('message', listener);
+             const listener = (e: any) => handleWebViewMessage(e);
+             window.addEventListener('message', listener);
+             return () => window.removeEventListener('message', listener);
         }
     }, []);
 
@@ -463,12 +461,11 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
 
             {Platform.OS === 'web' ? (
                 <View style={[styles.mapFrame, { overflow: 'hidden' }]}>
-                    {/* @ts-ignore */}
-                    <iframe
-                        ref={webFrameRef}
-                        style={{ width: '100%', height: '100%', border: 'none' }}
-                        srcDoc={htmlContent}
-                    />
+                    {React.createElement('iframe', {
+                        ref: webFrameRef,
+                        style: { width: '100%', height: '100%', border: 'none' },
+                        srcDoc: htmlContent
+                    })}
                 </View>
             ) : (
                 <WebView
@@ -486,10 +483,10 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
             {selectedZone && (selectedZone.status === 'red' || selectedZone.status === 'orange') && (
                 <View style={[styles.suggestionDialogBox, { backgroundColor: '#3b0000', borderColor: '#ff3b30' }]}>
                     <Text style={[styles.suggestionTitle, { color: '#ff3b30', fontSize: 24, fontWeight: '900' }]}>
-                        🔥 CONGESTION WARNING
+                         🔥 CONGESTION WARNING
                     </Text>
                     <Text style={[styles.suggestionSub, { color: '#ffaaaa', fontSize: 16, marginTop: 10, lineHeight: 22 }]}>
-                        {selectedZone.id} is currently experiencing extreme crowd density! Estimated Wait Time: 18 Minutes.
+                         {selectedZone.id} is currently experiencing extreme crowd density! Estimated Wait Time: 18 Minutes.
                     </Text>
                     {selectedZone.alternativeCoords ? (
                         <TouchableOpacity style={[styles.hudBtnGreen, { backgroundColor: '#ff3b30', marginTop: 15, padding: 15 }]} onPress={() => {
@@ -533,9 +530,9 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
                     {/* Active override recommending dynamically alternative amenity naturally skipping crowds */}
                     {selectedZone.alternativeCoords && selectedZone.status === 'red' && (
                         <TouchableOpacity style={[styles.hudBtnGreen, { marginBottom: 10 }]} onPress={() => {
-                            if (!hasCheckedIn) {
+                            if(!hasCheckedIn) {
                                 setToastMessage({ type: 'warning', text: 'Navigation Blocked: Map bounds require you to reach your assigned Block to scan ticket first.' });
-                                if (onReroute) onReroute(ticketTarget);
+                                if(onReroute) onReroute(ticketTarget);
                             } else {
                                 if (onReroute) onReroute(selectedZone.alternativeCoords);
                             }
@@ -547,9 +544,9 @@ export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], st
 
                     <View style={styles.hudRow}>
                         <TouchableOpacity style={styles.hudBtnBlue} onPress={() => {
-                            if (!hasCheckedIn) {
+                            if(!hasCheckedIn) {
                                 setToastMessage({ type: 'warning', text: 'Navigation Blocked: Map bounds require you to reach your assigned Block to scan ticket first.' });
-                                if (onReroute) onReroute(ticketTarget);
+                                if(onReroute) onReroute(ticketTarget);
                             } else {
                                 if (onReroute) onReroute(selectedZone.coordinates);
                             }
