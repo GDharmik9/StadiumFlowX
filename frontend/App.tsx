@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Alert, SafeAreaView, Platform } from 'react-native';
+import { View, Text, Alert, Platform } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { db, auth } from './src/services/firebaseConfig';
-import { doc, onSnapshot, updateDoc, collection } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, collection, setDoc } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { TrafficStatusBar } from './src/components/TrafficStatusBar';
 import { StadiumMap } from './src/components/StadiumMap';
@@ -18,17 +19,50 @@ export default function App() {
   
   const [uid, setUid] = useState<string | null>(null);
   const [activeRole, setActiveRole] = useState<string | null>(null);
+  const [allUsers, setAllUsers] = useState<any[]>([]); // Tracking Ghost Agents natively
   
-  // Default Spawn Path Array (Gate_1 to Zone A)
-  const defaultPath = [{x: 500,y: 950}, {x: 500,y: 800}, {x: 450,y: 750}];
-  const [navigationPath, setNavigationPath] = useState(defaultPath);
+  // 10 Simulated User Data Sets mapping Hierarchical seating and routing
+  const initialUserRoutes: any = {
+      1: { start: {x: 500, y: 950}, dest: {x: 500, y: 850}, seat: 'South Premium Suites Lower' },
+      2: { start: {x: 500, y: 50}, dest: {x: 500, y: 150}, seat: 'North Corporate Box Upper' },
+      3: { start: {x: 500, y: 950}, dest: {x: 150, y: 200}, seat: 'Block J (Upper Block)' },
+      4: { start: {x: 500, y: 950}, dest: {x: 350, y: 850}, seat: 'Jio Block L Lower' },
+      5: { start: {x: 500, y: 50}, dest: {x: 850, y: 500}, seat: 'Block Q (BKT Tyres) Lower' },
+      6: { start: {x: 500, y: 50}, dest: {x: 650, y: 200}, seat: 'Torrent Group Block M Middle' },
+      7: { start: {x: 500, y: 950}, dest: {x: 500, y: 750}, seat: 'President Gallery Lower' },
+      8: { start: {x: 500, y: 950}, dest: {x: 150, y: 500}, seat: 'Block K (Upper Block)' },
+      9: { start: {x: 500, y: 50}, dest: {x: 850, y: 800}, seat: 'Block R (BKT Tyres) Upper' },
+      10: { start: {x: 500, y: 950}, dest: {x: 650, y: 850}, seat: 'Equitas Bank Block Middle' }
+  };
+
+  const [userLocation, setUserLocation] = useState<any>({x: 500, y: 500});
+  const [navigationPath, setNavigationPath] = useState<any[]>([]);
+  const [ticketTarget, setTicketTarget] = useState<any>(null);
 
   useEffect(() => {
-    // 1. Silent Auth Initialization (overridden rules protect against timeouts)
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+    // 1. Silent Auth Initialization hooking Ticket Assignment seamlessly bypassing obsolete UI menus
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setUid(user.uid);
-        setCurrentView('role_select');
+        if(!activeRole) {
+            const assignedId = Math.floor(Math.random() * 10) + 1;
+            const roleStr = `User_${assignedId}`;
+            const routeMeta = initialUserRoutes[assignedId];
+            
+            await setDoc(doc(db, "users", roleStr), {
+                tester_id: roleStr,
+                uid: user.uid,
+                hasEntered: true,
+                target_seat_id: routeMeta.seat,
+                current_coords: routeMeta.start
+            });
+            
+            setActiveRole(roleStr);
+            setUserLocation(routeMeta.start);
+            setTicketTarget(routeMeta.dest);
+            setNavigationPath(getPath(routeMeta.start, routeMeta.dest));
+            setCurrentView('dashboard');
+        }
       } else {
         signInAnonymously(auth).catch(err => console.error(err));
       }
@@ -39,8 +73,14 @@ export default function App() {
       const zonesRaw = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       setStadiumZones(zonesRaw);
     });
+
+    // 3. Sync Active Ecosystem Entities mapping concurrent Fan personas universally 
+    const unsubGhosts = onSnapshot(collection(db, "users"), (snapshot) => {
+        const payload = snapshot.docs.map(d => d.data());
+        setAllUsers(payload);
+    });
     
-    return () => { unsubZones(); unsubscribeAuth(); };
+    return () => { unsubZones(); unsubGhosts(); unsubscribeAuth(); };
   }, []);
 
   // 3. Script Engine Alert Receiver hook
@@ -60,74 +100,62 @@ export default function App() {
     }
   }, [activeRole]);
 
-  // Viewport structural Wrapper protecting notch interference 
+  // Viewport structural Wrapper projecting strict boundary limits accommodating physical Pixels
   const RouteWrapper = ({ children }: { children: React.ReactNode }) => (
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff', paddingTop: Platform.OS === 'android' ? 25 : 0 }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top', 'left', 'right']}>
           {children}
       </SafeAreaView>
   );
 
   // ==============================
-  // RENDER ROUTING
+  // RENDER ROUTING (Wrapped safely inside Context Providers)
   // ==============================
-  if (currentView === 'auth') {
-    return <RouteWrapper><View style={{flex:1, justifyContent:'center', alignItems:'center'}}><Text>Initializing Secure Session...</Text></View></RouteWrapper>;
-  }
+  return (
+    <SafeAreaProvider>
+      {currentView === 'auth' && (
+          <RouteWrapper><View style={{flex:1, justifyContent:'center', alignItems:'center'}}><Text>Initializing Secure Session...</Text></View></RouteWrapper>
+      )}
 
-  if (currentView === 'role_select') {
-    return (
-      <RouteWrapper>
-        <RoleSelector uid={uid!} onRoleSelected={(roleId) => {
-            setActiveRole(roleId);
-            setNavigationPath(defaultPath); // reset bounds
-            setCurrentView('dashboard');
-        }} />
-      </RouteWrapper>
-    );
-  }
+      {currentView === 'role_select' && (
+          <RouteWrapper>
+            <RoleSelector uid={uid!} onRoleSelected={(roleId) => {
+                setActiveRole(roleId);
+                setCurrentView('dashboard');
+            }} />
+          </RouteWrapper>
+      )}
 
-  if (currentView === 'dashboard') {
-    return (
-        <RouteWrapper>
-            <Dashboard 
-                testerId={activeRole!} 
-                onEnterStadium={() => setCurrentView('simulation')} 
-                onGoBack={() => setCurrentView('role_select')}
-            />
-        </RouteWrapper>
-    );
-  }
+      {currentView === 'dashboard' && (
+          <RouteWrapper>
+              <Dashboard 
+                  testerId={activeRole!} 
+                  onEnterStadium={() => setCurrentView('simulation')} 
+                  onGoBack={() => setCurrentView('role_select')}
+              />
+          </RouteWrapper>
+      )}
 
-   if (currentView === 'simulation') {
-      // Filter the 'Gate_1' data specifically for the old Traffic bar
-      const entranceData = stadiumZones.find(z => z.id === 'Gate_1') || { current_pings: 0, capacity: 10 };
-      
-      return (
-        <RouteWrapper>
+      {currentView === 'simulation' && (
           <View style={{ flex: 1, backgroundColor: '#fff' }}>
-            {/* Decoupled Back Nav strictly avoiding Status Bar conflicts */}
-            <View style={{flexDirection: 'row', padding: 15, borderBottomWidth: 1, borderColor: '#eee', alignItems: 'center'}}>
-                <Text style={{color:'#007AFF', fontWeight:'bold', fontSize:16}} onPress={() => setCurrentView('dashboard')}>
-                     {"< Exit Simulation"}
-                </Text>
-            </View>
-            <TrafficStatusBar currentPings={entranceData.current_pings} capacity={entranceData.capacity} />
-            <View style={{ flex: 1, justifyContent: 'center' }}>
               <StadiumMap 
-                 userLocation={{ x: 500, y: 950 }} 
+                 userLocation={userLocation} 
+                 ticketTarget={ticketTarget}
                  navigationPath={navigationPath} 
                  stadiumZones={stadiumZones}
+                 allUsers={allUsers} // Tunneling ghosts ecosystem strictly directly over bridge 
+                 activeRole={activeRole!}
                  onReroute={(newTarget: any) => {
-                     // Array Route overriding algorithm bypassing Center trajectory securely
-                     const safeCurveArray = getPath({x: 500, y: 950}, newTarget);
+                     const safeCurveArray = getPath(userLocation, newTarget);
                      setNavigationPath(safeCurveArray);
                  }}
+                 onTeleport={(newCoords: any) => {
+                     setUserLocation(newCoords);
+                     setNavigationPath([]); 
+                 }}
+                 onExit={() => setCurrentView('dashboard')}
               />
-            </View>
           </View>
-        </RouteWrapper>
-      );
-  }
-  
-  return null;
+      )}
+    </SafeAreaProvider>
+  );
 }

@@ -78,7 +78,7 @@ export const generateVenueGeoJSON = () => {
        });
    });
 
-   // Generating Level 0 Amenities (Points establishing the Hotspot navigation targets safely tucked in corridors)
+    // Generating Level 0 Amenities (Points establishing the Hotspot navigation targets safely tucked in corridors)
    amenities.forEach((amenity) => {
         const gps = virtualToGPS(amenity.x, amenity.y);
         features.push({
@@ -89,13 +89,15 @@ export const generateVenueGeoJSON = () => {
                 category: amenity.category,
                 name: amenity.label,
                 level: 0,
-                status: amenity.status
+                status: amenity.status,
+                vx: amenity.x,
+                vy: amenity.y
             },
             geometry: { type: 'Point', coordinates: [gps.lng, gps.lat] }
         });
    });
 
-   // Generating Level 0 Gates (Points identifying structural entry nodes)
+    // Generating Level 0 Gates (Points identifying structural entry nodes)
    gates.forEach((gate) => {
         const gps = virtualToGPS(gate.x, gate.y);
         features.push({
@@ -106,7 +108,9 @@ export const generateVenueGeoJSON = () => {
                 category: gate.category,
                 name: gate.label,
                 level: 0,
-                status: gate.status
+                status: gate.status,
+                vx: gate.x,
+                vy: gate.y
             },
             geometry: { type: 'Point', coordinates: [gps.lng, gps.lat] }
         });

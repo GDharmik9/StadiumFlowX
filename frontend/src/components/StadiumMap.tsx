@@ -1,40 +1,189 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, SafeAreaView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { STADIUM_CENTER, virtualToGPS } from '../utils/coordinates';
 import { generateVenueGeoJSON } from '../utils/venue';
+import { getPath } from '../utils/pathfinding';
 
-export const StadiumMap = ({ userLocation, navigationPath = [], stadiumZones = [], onReroute }: any) => {
+export const StadiumMap = ({ userLocation, ticketTarget, navigationPath = [], stadiumZones = [], allUsers = [], activeRole, onReroute, onExit, onTeleport }: any) => {
     const webViewRef = useRef<WebView>(null);
     const [selectedZone, setSelectedZone] = useState<any>(null);
-    const [activeLevel, setActiveLevel] = useState<number>(1); // Defaults showcasing grand Seating Blocks visually
-    
+    const [activeLevel, setActiveLevel] = useState<number>(1);
+    const [toastMessage, setToastMessage] = useState<{ type: 'info' | 'success' | 'warning', text: string } | null>({ type: 'info', text: 'Welcome! Proceed to Gate 1.' });
+    const [hasCheckedIn, setHasCheckedIn] = useState(false); // Permanent logical unlock
+
+    // Validate Check-in completion matching natively coordinates
+    useEffect(() => {
+        if (!hasCheckedIn && ticketTarget) {
+             if (Math.abs(userLocation.x - ticketTarget.x) < 20 && Math.abs(userLocation.y - ticketTarget.y) < 20) {
+                 setHasCheckedIn(true);
+                 setToastMessage({ type: 'success', text: 'Ticket successfully checked in at Block. You are now permitted to access Amenities.' });
+             }
+        }
+    }, [userLocation, ticketTarget, hasCheckedIn]);
+
+    // Auto-dismiss smart notifications elegantly after 5 seconds
+    useEffect(() => {
+        if (toastMessage) {
+            const timer = setTimeout(() => setToastMessage(null), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [toastMessage]);
+
     // Core payload resolving entirely strictly internally!
     const venueGeoJSON = generateVenueGeoJSON();
 
     // Navigation Matrix parsing 0-1000 bounds mapped through GPS
-    const pathLineGPS = navigationPath.map((p:any) => {
+    const pathLineGPS = navigationPath.map((p: any) => {
         const gps = virtualToGPS(p.x, p.y);
         return [gps.lng, gps.lat];
     });
 
+    // Helper: Clustered Offset natively separating avatars sharing identical seating arrays
+    const getClusteredOffset = (idStr: string) => {
+        let hash = 0;
+        for (let i = 0; i < idStr.length; i++) hash = idStr.charCodeAt(i) + ((hash << 5) - hash);
+        return { x: (hash % 30) - 15, y: ((hash >> 3) % 30) - 15 };
+    };
+
+    // Headless Simulation Ref
+    const ghostStateRef = useRef<any>({});
+
+    useEffect(() => {
+        // Living Crowd Autonomous Script bridging perfectly to WebView Canvas natively avoiding React State Re-Renders
+        const interval = setInterval(() => {
+            const activeGhostBase = allUsers.filter((u: any) => u.tester_id !== activeRole && u.current_coords);
+            if (activeGhostBase.length === 0 || !webViewRef.current) return;
+
+            const features = activeGhostBase.map((ghostBase: any) => {
+                let state = ghostStateRef.current[ghostBase.tester_id];
+                if (!state) {
+                    const offset = getClusteredOffset(ghostBase.tester_id);
+                    state = {
+                        coords: { x: ghostBase.current_coords.x + offset.x, y: ghostBase.current_coords.y + offset.y },
+                        path: [], step: 0, waitTicks: Math.floor(Math.random() * 20)
+                    };
+                }
+
+                if (state.waitTicks > 0) {
+                    state.waitTicks--;
+                } 
+                else if (state.path && state.step < state.path.length - 1) {
+                    state.step++;
+                    state.coords = state.path[state.step];
+                } 
+                else {
+                    // Re-route! Pick a new geometric random target mapping smoothly over the concourse Arc!
+                    const newTarget = { x: 100 + Math.random() * 800, y: 100 + Math.random() * 800 };
+                    state.path = getPath(state.coords, newTarget);
+                    state.step = 0;
+                    state.waitTicks = 20 + Math.floor(Math.random() * 40); // Random wait simulating check-ins naturally
+                }
+                ghostStateRef.current[ghostBase.tester_id] = state;
+
+                const gps = virtualToGPS(state.coords.x, state.coords.y);
+                return {
+                    type: 'Feature', properties: { id: ghostBase.tester_id },
+                    geometry: { type: 'Point', coordinates: [gps.lng, gps.lat] }
+                };
+            });
+
+            const ghostsGeoJSON = { type: 'FeatureCollection', features };
+            webViewRef.current.injectJavaScript(`
+                if(window.map && window.map.getSource('ghost-agents')) {
+                     window.map.getSource('ghost-agents').setData(${JSON.stringify(ghostsGeoJSON)});
+                }
+                true;
+            `);
+        }, 150); // 150ms interpolation ensures extremely fluid movement mapping beautifully on devices!
+
+        return () => clearInterval(interval);
+    }, [allUsers]);
+
+    // Construct Active User Tracking (The Blue Dot)
+    const activeOffset = getClusteredOffset(activeRole || 'User_0');
+    const activeUserGeoJSON = {
+        type: 'FeatureCollection',
+        features: [{
+            type: 'Feature',
+            properties: { id: 'active-user' },
+            geometry: { type: 'Point', coordinates: [virtualToGPS(userLocation.x + activeOffset.x, userLocation.y + activeOffset.y).lng, virtualToGPS(userLocation.x + activeOffset.x, userLocation.y + activeOffset.y).lat] }
+        }]
+    };
+
     // We pass the GPS path dynamically reacting flawlessly to rendering loops via message arrays
     useEffect(() => {
-        if(webViewRef.current && pathLineGPS.length >= 2) {
-             const pathData = { type: 'Feature', geometry: { type: 'LineString', coordinates: pathLineGPS } };
-             webViewRef.current.postMessage(JSON.stringify({ type: 'UPDATE_PATH', payload: pathData }));
+        if (webViewRef.current) {
+            let pathData;
+            if (pathLineGPS.length >= 2) {
+                 pathData = { type: 'Feature', geometry: { type: 'LineString', coordinates: pathLineGPS } };
+            } else {
+                 pathData = { type: 'FeatureCollection', features: [] }; // Effectively erases the blue line bridging strictly native bounds!
+            }
+            webViewRef.current.injectJavaScript(`
+                if(window.map && window.map.getSource('navigation-path')) {
+                     window.map.getSource('navigation-path').setData(${JSON.stringify(pathData)});
+                }
+                true;
+             `);
         }
     }, [navigationPath, activeLevel]);
 
-    // Force strict sync reacting to Native Toggle hooks
+    // Force strict sync reacting to Native Toggle hooks and Agent Syncing
     useEffect(() => {
-        if(webViewRef.current) {
-             webViewRef.current.postMessage(JSON.stringify({ type: 'SET_LEVEL', payload: activeLevel }));
+        if (webViewRef.current) {
+            webViewRef.current.injectJavaScript(`
+                if(window.map) {
+                     window.map.setFilter('room-extrusion', ['all', ['==', 'feature_type', 'unit'], ['==', 'level', ${activeLevel}]]);
+                     window.map.setFilter('hotspot-points', ['all', ['!=', 'feature_type', 'unit'], ['==', 'level', ${activeLevel}]]);
+                }
+                true;
+             `);
         }
     }, [activeLevel]);
 
-    // MAPLIBRE OS ENGINE HTML (Sandboxed exclusively)
-    const htmlContent = `
+    // Ghost state rendering is entirely intercepted directly within the Headless Simulator sequence
+
+    // Track the Active User's Blue Dot natively over coordinate updates
+    useEffect(() => {
+        if (webViewRef.current && activeUserGeoJSON) {
+            const userGPS = virtualToGPS(userLocation.x + activeOffset.x, userLocation.y + activeOffset.y);
+            webViewRef.current.injectJavaScript(`
+                if(window.map && window.map.getSource('active-user')) {
+                     window.map.getSource('active-user').setData(${JSON.stringify(activeUserGeoJSON)});
+                     
+                     // Cinematic Tracking Camera following Blue Dot vectors natively
+                     window.map.flyTo({
+                         center: [${userGPS.lng}, ${userGPS.lat}],
+                         zoom: 18,
+                         pitch: 60,
+                         duration: 2000,
+                         essential: true
+                     });
+                }
+                true;
+             `);
+        }
+    }, [userLocation]);
+
+    // Active Agency Interaction Hooks mapping proximity mathematically 
+    useEffect(() => {
+        const distToGate1 = Math.sqrt(Math.pow(220 - userLocation.x, 2) + Math.pow(850 - userLocation.y, 2));
+        if (distToGate1 < 25) {
+            setToastMessage({ type: 'success', text: 'Ticket Scanned: Welcome to the Stadium Simulation.' });
+        } else if (navigationPath.length > 0) {
+            const dest = navigationPath[navigationPath.length - 1];
+            const targetAmenity = stadiumZones.find((z: any) => z.coordinates && z.coordinates.x === dest.x && z.coordinates.y === dest.y);
+            if (targetAmenity) {
+                if (targetAmenity.status === 'red') setToastMessage({ type: 'warning', text: `${targetAmenity.id.replace(/_/g, ' ')} is heavily congested.` });
+                else setToastMessage({ type: 'info', text: `Routing safely to ${targetAmenity.id.replace(/_/g, ' ')}...` });
+            }
+        }
+    }, [userLocation, navigationPath]);
+
+    // MAPLIBRE OS ENGINE HTML (Sandboxed exclusively forcing lock to stop WebView flickering!)
+    const htmlContent = React.useMemo(() => `
 <!DOCTYPE html>
 <html>
 <head>
@@ -56,8 +205,8 @@ export const StadiumMap = ({ userLocation, navigationPath = [], stadiumZones = [
                 },
                 layers: [{ id: 'satellite', type: 'raster', source: 'satellite', minzoom: 0, maxzoom: 22 }]
             },
-            center: [${STADIUM_CENTER.lng}, ${STADIUM_CENTER.lat}],
-            zoom: 17,
+            center: [${virtualToGPS(userLocation.x + activeOffset.x, userLocation.y + activeOffset.y).lng}, ${virtualToGPS(userLocation.x + activeOffset.x, userLocation.y + activeOffset.y).lat}],
+            zoom: 18,
             pitch: 55,       // Isometric Drone projection establishing scale
             bearing: -45,     
             antialias: true  // Critical for fluid 3D line edges visually
@@ -80,7 +229,7 @@ export const StadiumMap = ({ userLocation, navigationPath = [], stadiumZones = [
                   'id': 'room-extrusion',
                   'type': 'fill-extrusion',
                   'source': 'stadium-data',
-                  'filter': ['all', ['==', 'feature_type', 'unit'], ['==', 'level', ${activeLevel}]], // Default to strictly Level 1
+                  'filter': ['all', ['==', 'feature_type', 'unit'], ['==', 'level', 1]], // Default to strictly Level 1
                   'paint': {
                       'fill-extrusion-color': ['get', 'color'],
                       'fill-extrusion-height': ['get', 'height'],
@@ -108,7 +257,7 @@ export const StadiumMap = ({ userLocation, navigationPath = [], stadiumZones = [
                   'id': 'hotspot-points',
                   'type': 'circle',
                   'source': 'stadium-data',
-                  'filter': ['all', ['!=', 'feature_type', 'unit'], ['==', 'level', ${activeLevel}]], 
+                  'filter': ['all', ['!=', 'feature_type', 'unit'], ['==', 'level', 1]], 
                   'paint': {
                       'circle-radius': 14,
                       'circle-color': [
@@ -123,18 +272,34 @@ export const StadiumMap = ({ userLocation, navigationPath = [], stadiumZones = [
                   }
              });
 
-             // Secure Bridging System reacting to Native OS Toggles natively inside DOM scope
-             window.addEventListener('message', function(event) {
-                 try {
-                     const data = JSON.parse(event.data);
-                     if(data.type === 'UPDATE_PATH' && window.map) {
-                          window.map.getSource('navigation-path').setData(data.payload);
-                     }
-                     if(data.type === 'SET_LEVEL' && window.map) {
-                          window.map.setFilter('room-extrusion', ['all', ['==', 'feature_type', 'unit'], ['==', 'level', data.payload]]);
-                          window.map.setFilter('hotspot-points', ['all', ['!=', 'feature_type', 'unit'], ['==', 'level', data.payload]]);
-                     }
-                 } catch (e) {}
+             // Layer 4: Multi-Agent Cloud Actors (Living Crowd simulation)
+             map.addSource('ghost-agents', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+             map.addLayer({
+                  'id': 'ghost-layer',
+                  'type': 'circle',
+                  'source': 'ghost-agents',
+                  'paint': {
+                      'circle-radius': 10,
+                      'circle-color': '#00bcd4',
+                      'circle-opacity': 0.7,
+                      'circle-stroke-width': 2,
+                      'circle-stroke-color': '#fff'
+                  }
+             });
+
+             // Layer 5: Active User Marker (The Primary Blue Dot)
+             map.addSource('active-user', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+             map.addLayer({
+                  'id': 'active-user-point',
+                  'type': 'circle',
+                  'source': 'active-user',
+                  'paint': {
+                      'circle-radius': 12,
+                      'circle-color': '#007AFF',
+                      'circle-stroke-width': 3,
+                      'circle-stroke-color': '#ffffff',
+                      'circle-opacity': 1.0
+                  }
              });
 
              // Interaction Bridges binding Touch back out to Expo App logic safely!
@@ -145,32 +310,60 @@ export const StadiumMap = ({ userLocation, navigationPath = [], stadiumZones = [
     </script>
 </body>
 </html>
-    `;
+    `, []);
 
     // Expo Interception handler 
     const handleWebViewMessage = (event: any) => {
         const data = JSON.parse(event.nativeEvent.data);
-        if(data.type === 'HOTSPOT_SELECTED') {
-            // Find coordinate dynamically resolving string properties to abstract X/Y for math natively!
-            const hitFeature = venueGeoJSON.features.find((f:any) => f.properties.id === data.payload);
+        if (data.type === 'HOTSPOT_SELECTED') {
+            const hitFeature = venueGeoJSON.features.find((f: any) => f.properties.id === data.payload);
+            const isCongested = hitFeature?.properties.status === 'red';
+
+            let altCoords = null;
+            if (isCongested && hitFeature?.properties.category) {
+                const altFeature = venueGeoJSON.features.find((f: any) =>
+                    f.properties.category === hitFeature.properties.category &&
+                    f.properties.id !== data.payload &&
+                    f.properties.status !== 'red'
+                );
+                if (altFeature) {
+                    altCoords = { x: altFeature.properties.vx, y: altFeature.properties.vy };
+                }
+            }
+
             setSelectedZone({
-                 id: hitFeature?.properties.name,
-                 status: hitFeature?.properties.status,
-                 coordinates: stadiumZones.find((z:any)=>z.id === data.payload)?.coordinates || {x:500,y:500} // Legacy fallback bounding math cleanly
+                id: hitFeature?.properties.name,
+                status: hitFeature?.properties.status,
+                coordinates: { x: hitFeature?.properties.vx || 500, y: hitFeature?.properties.vy || 500 }, // Solves pitch bug forever
+                alternativeCoords: altCoords
             });
         }
     };
 
     return (
         <View style={styles.container}>
+            {/* FLOATING ACTION BUTTON securing navigation escape natively */}
+            <TouchableOpacity style={styles.fabBtn} onPress={onExit}>
+                <Text style={styles.fabIcon}>🏠</Text>
+            </TouchableOpacity>
+
+            {/* DYNAMIC SMART TOAST ENGINE rendering strictly over safe insets */}
+            {toastMessage && (
+                <SafeAreaView style={styles.toastWrapper}>
+                    <View style={[styles.toastBox, { backgroundColor: toastMessage.type === 'success' ? '#4CD964' : toastMessage.type === 'warning' ? '#FF9500' : '#007AFF' }]}>
+                        <Text style={styles.toastText}>{toastMessage.text}</Text>
+                    </View>
+                </SafeAreaView>
+            )}
+
             {/* LEVEL TOGGLE INTERFACE explicitly overriding Z-indexes directly! */}
             <SafeAreaView style={styles.floorControlWrapper}>
                 <View style={styles.floorPill}>
                     <TouchableOpacity style={[styles.floorBtn, activeLevel === 1 && styles.floorBtnActive]} onPress={() => setActiveLevel(1)}>
-                         <Text style={[styles.floorText, activeLevel === 1 && styles.floorTextActive]}>Seating (L1)</Text>
+                        <Text style={[styles.floorText, activeLevel === 1 && styles.floorTextActive]}>Seating (L1)</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.floorBtn, activeLevel === 0 && styles.floorBtnActive]} onPress={() => setActiveLevel(0)}>
-                         <Text style={[styles.floorText, activeLevel === 0 && styles.floorTextActive]}>Concourse (L0)</Text>
+                        <Text style={[styles.floorText, activeLevel === 0 && styles.floorTextActive]}>Concourse (L0)</Text>
                     </TouchableOpacity>
                 </View>
             </SafeAreaView>
@@ -186,24 +379,59 @@ export const StadiumMap = ({ userLocation, navigationPath = [], stadiumZones = [
                 scrollEnabled={false}
             />
 
+            {/* SUGGESTION DIALOG OVERLAY (Proactive Active-Agency Walking Hook) */}
+            {navigationPath.length > 0 && (
+                <View style={styles.suggestionDialogBox}>
+                    <Text style={styles.suggestionTitle}>Navigation Active</Text>
+                    <Text style={styles.suggestionSub}>Follow the blue routing line to your destination physically.</Text>
+                    <TouchableOpacity style={styles.hudBtnGreen} onPress={() => {
+                        // Triggers Teleport to exact final point of path sequence natively
+                        if (onTeleport) onTeleport(navigationPath[navigationPath.length - 1]);
+                    }}>
+                        <Text style={styles.hudBtnText}>[ Navigate ]</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
             {/* HOTSPOT HUD LAYER decoupling UI rendering completely from HTML payload! */}
             {selectedZone && (
                 <View style={styles.hudOverlay}>
                     <Text style={styles.hudTitle}>{selectedZone.id.replace(/_/g, " ")}</Text>
-                    <View style={[styles.hudBadge, selectedZone.status === 'green' ? {backgroundColor:'#4CD964'} : selectedZone.status === 'orange' ? {backgroundColor:'#FF9500'} : {backgroundColor:'#FF3B30'}]}>
+                    <View style={[styles.hudBadge, selectedZone.status === 'green' ? { backgroundColor: '#4CD964' } : selectedZone.status === 'orange' ? { backgroundColor: '#FF9500' } : { backgroundColor: '#FF3B30' }]}>
                         <Text style={styles.hudStatusText}>
                             {selectedZone.status === 'green' ? "Vacant: Clear Area" : selectedZone.status === 'orange' ? "Busy: Standard Wait time" : "Critical Congestion"}
                         </Text>
                     </View>
+
+                    {/* Active override recommending dynamically alternative amenity naturally skipping crowds */}
+                    {selectedZone.alternativeCoords && selectedZone.status === 'red' && (
+                        <TouchableOpacity style={[styles.hudBtnGreen, { marginBottom: 10 }]} onPress={() => {
+                            if(!hasCheckedIn) {
+                                setToastMessage({ type: 'warning', text: 'Navigation Blocked: Map bounds require you to reach your assigned Block to scan ticket first.' });
+                                if(onReroute) onReroute(ticketTarget);
+                            } else {
+                                if (onReroute) onReroute(selectedZone.alternativeCoords);
+                            }
+                            setSelectedZone(null);
+                        }}>
+                            <Text style={styles.hudBtnText}>Reroute to Uncongested Alternative</Text>
+                        </TouchableOpacity>
+                    )}
+
                     <View style={styles.hudRow}>
                         <TouchableOpacity style={styles.hudBtnBlue} onPress={() => {
-                            if(onReroute) onReroute(selectedZone.coordinates);
-                            setSelectedZone(null); 
+                            if(!hasCheckedIn) {
+                                setToastMessage({ type: 'warning', text: 'Navigation Blocked: Map bounds require you to reach your assigned Block to scan ticket first.' });
+                                if(onReroute) onReroute(ticketTarget);
+                            } else {
+                                if (onReroute) onReroute(selectedZone.coordinates);
+                            }
+                            setSelectedZone(null);
                         }}>
-                             <Text style={styles.hudBtnText}>GPS Navigate</Text>
+                            <Text style={styles.hudBtnText}>GPS Navigate</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.hudBtnGray} onPress={() => setSelectedZone(null)}>
-                             <Text style={styles.hudBtnTextDark}>Dismiss</Text>
+                            <Text style={styles.hudBtnTextDark}>Dismiss</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -215,22 +443,36 @@ export const StadiumMap = ({ userLocation, navigationPath = [], stadiumZones = [
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
     mapFrame: { flex: 1 },
-    
+
     // UI Toggle Overrides 
     floorControlWrapper: { position: 'absolute', top: 50, width: '100%', zIndex: 10, alignItems: 'center' },
-    floorPill: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 25, padding: 4, shadowColor: '#000', shadowOffset:{width:0,height:3}, shadowOpacity:0.3, shadowRadius:5, elevation:5 },
+    floorPill: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 25, padding: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 5, elevation: 5 },
     floorBtn: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 20 },
     floorBtnActive: { backgroundColor: '#111' },
     floorText: { fontWeight: '700', color: '#555' },
     floorTextActive: { color: '#fff' },
 
-    hudOverlay: { position: 'absolute', bottom: 40, left: 20, right: 20, backgroundColor: '#fff', padding: 20, borderRadius: 15, shadowColor: '#000', shadowOffset:{width:0,height:5}, shadowOpacity:0.3, shadowRadius:10, elevation:10 },
-    hudTitle: { fontSize: 24, fontWeight:'900', marginBottom:10, color: '#111' },
-    hudBadge: { paddingVertical:8, paddingHorizontal:12, borderRadius:8, marginBottom:18, alignItems: 'center' },
-    hudStatusText: { color: '#fff', fontWeight:'bold', fontSize:14, textTransform: 'uppercase' },
-    hudRow: { flexDirection: 'row', justifyContent:'space-between' },
-    hudBtnBlue: { flex: 1, backgroundColor: '#007AFF', padding: 15, borderRadius: 8, alignItems:'center', marginRight: 10 },
-    hudBtnGray: { flex: 1, backgroundColor: '#eee', padding: 15, borderRadius: 8, alignItems:'center' },
+    // TOAST & FAB STRESS UX
+    fabBtn: { position: 'absolute', top: 50, right: 20, width: 50, height: 50, backgroundColor: '#fff', borderRadius: 25, justifyContent: 'center', alignItems: 'center', zIndex: 200, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 5, elevation: 12 },
+    fabIcon: { fontSize: 24 },
+
+    toastWrapper: { position: 'absolute', top: 120, width: '100%', alignItems: 'center', zIndex: 100 },
+    toastBox: { paddingHorizontal: 25, paddingVertical: 12, borderRadius: 25, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 5, elevation: 5 },
+    toastText: { color: '#fff', fontWeight: 'bold' },
+
+    hudOverlay: { position: 'absolute', bottom: 40, left: 20, right: 20, backgroundColor: '#fff', padding: 20, borderRadius: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 10 },
+    hudTitle: { fontSize: 24, fontWeight: '900', marginBottom: 10, color: '#111' },
+    hudBadge: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, marginBottom: 18, alignItems: 'center' },
+    hudStatusText: { color: '#fff', fontWeight: 'bold', fontSize: 14, textTransform: 'uppercase' },
+    hudRow: { flexDirection: 'row', justifyContent: 'space-between' },
+    hudBtnBlue: { flex: 1, backgroundColor: '#007AFF', padding: 15, borderRadius: 8, alignItems: 'center', marginRight: 10 },
+    hudBtnGray: { flex: 1, backgroundColor: '#eee', padding: 15, borderRadius: 8, alignItems: 'center' },
+    hudBtnGreen: { backgroundColor: '#4CD964', padding: 15, borderRadius: 8, alignItems: 'center', width: '100%', marginTop: 10 },
     hudBtnText: { color: '#fff', fontWeight: 'bold' },
-    hudBtnTextDark: { color: '#333', fontWeight: 'bold' }
+    hudBtnTextDark: { color: '#333', fontWeight: 'bold' },
+
+    // SUGGESTION DIALOG
+    suggestionDialogBox: { position: 'absolute', bottom: 40, left: 20, right: 20, backgroundColor: '#fff', padding: 20, borderRadius: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 10, zIndex: 50 },
+    suggestionTitle: { fontSize: 20, fontWeight: '900', color: '#111', marginBottom: 5 },
+    suggestionSub: { fontSize: 14, color: '#666', marginBottom: 15 }
 });
