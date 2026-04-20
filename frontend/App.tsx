@@ -17,7 +17,6 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { db, auth } from './src/services/firebaseConfig';
 import { doc, onSnapshot, updateDoc, collection, setDoc } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { TrafficStatusBar } from './src/components/TrafficStatusBar';
 import { StadiumMap } from './src/components/StadiumMap';
 import { RoleSelector } from './src/components/RoleSelector';
 import { Dashboard } from './src/components/Dashboard';

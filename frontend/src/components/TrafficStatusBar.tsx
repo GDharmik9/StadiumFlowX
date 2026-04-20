@@ -7,7 +7,7 @@
  * @module components/TrafficStatusBar
  */
 import React from 'react';
-import { View, Text, StyleSheet, Dimensions, AccessibilityInfo } from 'react-native';
+import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import type { TrafficStatusBarProps } from '../types';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;

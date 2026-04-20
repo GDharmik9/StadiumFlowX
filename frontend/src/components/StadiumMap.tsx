@@ -17,7 +17,7 @@ import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import { View, StyleSheet, TouchableOpacity, Text, Platform, Vibration } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { STADIUM_CENTER, virtualToGPS } from '../utils/coordinates';
+import { virtualToGPS } from '../utils/coordinates';
 import { generateVenueGeoJSON } from '../utils/venue';
 import { getPath } from '../utils/pathfinding';
 import type { VirtualCoordinate, ToastMessage, SelectedZone, GhostState, StadiumMapProps } from '../types';
@@ -68,7 +68,7 @@ export const StadiumMap: React.FC<StadiumMapProps> = ({
   const webFrameRef = useRef<HTMLIFrameElement | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [selectedZone, setSelectedZone] = useState<SelectedZone | null>(null);
-  const [activeLevel, setActiveLevel] = useState<number>(1);
+  const [activeLevel, setActiveLevel] = useState<number>(0); // Default L0 = Concourse: shows amenity pins
   const [toastMessage, setToastMessage] = useState<ToastMessage | null>({
     type: 'info',
     text: 'Welcome! Proceed to Gate 1.',
@@ -374,7 +374,7 @@ export const StadiumMap: React.FC<StadiumMapProps> = ({
                     'fill-extrusion-color': ['get', 'color'],
                     'fill-extrusion-height': ['get', 'height'],
                     'fill-extrusion-base': ['get', 'base_height'],
-                    'fill-extrusion-opacity': 0.85
+                    'fill-extrusion-opacity': 0.0
                 }
             });
 
@@ -400,6 +400,7 @@ export const StadiumMap: React.FC<StadiumMapProps> = ({
                 'filter': ['all', ['!=', 'feature_type', 'unit']],
                 'paint': {
                     'circle-radius': 14,
+                    'circle-opacity': 1.0,
                     'circle-color': [
                         'match', ['get', 'status'],
                         'green', '#4CD964',

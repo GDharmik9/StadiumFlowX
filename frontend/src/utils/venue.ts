@@ -165,7 +165,7 @@ export const generateVenueGeoJSON = (): VenueFeatureCollection => {
         name: `Block ${block.label} (${block.zone})`,
         level: 1,
         color: '#1a5b82',
-        height: 35 + Math.random() * 15,
+        height: 35 + (block.label.charCodeAt(0) % 15), // Deterministic, varies 35–49 per block
         base_height: 5,
       },
       geometry: {
